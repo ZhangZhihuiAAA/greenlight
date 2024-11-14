@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -17,4 +18,34 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
     }
 
     return id, nil
+}
+
+type envelope map[string]any
+
+func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+    js, err := json.MarshalIndent(data, "", "    ")
+    if err != nil {
+        return err
+    }
+
+    // Append a newline to make it easier to view in terminal applications.
+    js = append(js, '\n')
+
+    // At this point, we know that we won't encounter any more errors before writing the response, 
+    // so it's safe to add any headers that we want to include. We loop through the header map and 
+    // add each header to the http.ResponseWriter header map. Note that it's OK if the provided 
+    // header map is nil. Go doesn't throw an error if you try to range over a nil map.
+    for key, value := range headers {
+        w.Header()[key] = value  // w.Header().Set(key, value)
+    }
+    // iterator version
+    // maps.Insert(w.Header(), maps.All(headers))
+
+    // Add the "Content-Type: application/json" header, then write the status code and JSON 
+    // response.
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    w.Write(js)
+
+    return nil
 }
