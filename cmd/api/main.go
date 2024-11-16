@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"greenlight.zzh.net/internal/data"
 )
 
 // Declare a string containing the application version number. Later in the book we'll
@@ -40,6 +41,7 @@ type config struct {
 type application struct {
     config config
     logger *slog.Logger
+    models data.Models
 }
 
 func main() {
@@ -55,24 +57,20 @@ func main() {
 
     logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-    // Call the openDB() function (see below) to create the connection pool, passing in the config
-    // struct. If this returns an error, we log it and exit the application immediately.
     db, err := openDB(cfg)
     if err != nil {
         logger.Error(err.Error())
         os.Exit(1)
     }
 
-    // Defer a call to db.Close() so that the connection pool is closed before the main()
-    // function exits.
     defer db.Close()
 
-    // Log a message to say that the connection pool has been successfully established.
     logger.Info("database connection pool established")
 
     app := &application{
         config: cfg,
         logger: logger,
+        models: data.NewModels(db),
     }
 
     srv := &http.Server{
