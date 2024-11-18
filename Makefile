@@ -23,4 +23,15 @@ psql_root:
 psql_greenlight:
 	docker exec -it postgres17 psql --dbname=greenlight --username=greenlight
 
-.PHONY: create_dirs go_mod_init go_install go_get postgres_run postgres_start psql_root psql_greenlight
+migrate_create:
+	migrate create -seq -ext=.sql -dir=./migrations create_movie_table
+	migrate create -seq -ext=.sql -dir=./migrations add_movie_check_constraints
+	migrate create -seq -ext .sql -dir ./migrations add_movie_indexes
+
+migrate_up:
+	migrate -path ./migrations -database "$(GREENLIGHT_DB_DSN)" up
+
+migrate_down:
+	migrate -path ./migrations -database "$(GREENLIGHT_DB_DSN)" down
+
+.PHONY: create_dirs go_mod_init go_install go_get postgres_run postgres_start psql_root psql_greenlight migrate_create migrate_up migrate_down
