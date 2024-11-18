@@ -10,6 +10,7 @@ go_install:
 go_get:
 	go get github.com/julienschmidt/httprouter@v1
 	go get github.com/lib/pq@v1
+	go get golang.org/x/time/rate@latest
 
 postgres_run:
 	docker run --name postgres17 -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=root -d postgres:latest
