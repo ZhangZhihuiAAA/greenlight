@@ -1,8 +1,9 @@
 package data
 
 import (
-	"database/sql"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -16,8 +17,8 @@ type Models struct {
 }
 
 // NewModels returns a Models struct containing the initialized models.
-func NewModels(db *sql.DB) Models {
+func NewModels(p *pgxpool.Pool) Models {
     return Models{
-        Movie: MovieModel{DB: db},
+        Movie: MovieModel{DB: p},
     }
 }

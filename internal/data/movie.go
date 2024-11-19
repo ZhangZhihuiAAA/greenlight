@@ -2,12 +2,12 @@ package data
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"greenlight.zzh.net/internal/validator"
 )
 
@@ -40,9 +40,9 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
     v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
 }
 
-// MovieModel struct wraps a sql.DB connection pool.
+// MovieModel struct wraps a database connection pool.
 type MovieModel struct {
-    DB *sql.DB
+    DB *pgxpool.Pool
 }
 
 // Insert inserts a new record in the movie table.
@@ -51,12 +51,12 @@ func (m MovieModel) Insert(movie *Movie) error {
               VALUES ($1, $2, $3, $4) 
               RETURNING id, created_at, version`
 
-    args := []any{movie.Title, movie.Year, movie.Runtime, pq.Array(movie.Genres)}
+    args := []any{movie.Title, movie.Year, movie.Runtime, movie.Genres}
 
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    return m.DB.QueryRowContext(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+    return m.DB.QueryRow(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
 // Get returns a specific record from the movie table.
@@ -74,19 +74,19 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    err := m.DB.QueryRowContext(ctx, query, id).Scan(
+    err := m.DB.QueryRow(ctx, query, id).Scan(
         &movie.ID,
         &movie.CreatedAt,
         &movie.Title,
         &movie.Year,
         &movie.Runtime,
-        pq.Array(&movie.Genres),
+        &movie.Genres,
         &movie.Version,
     )
 
     if err != nil {
         switch {
-        case errors.Is(err, sql.ErrNoRows):
+        case errors.Is(err, pgx.ErrNoRows):
             return nil, ErrRecordNotFound
         default:
             return nil, err
@@ -110,9 +110,9 @@ func (m MovieModel) GetAll(title string, genres []string, filter Filter) ([]*Mov
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    args := []any{title, pq.Array(genres), filter.limit(), filter.offset()}
+    args := []any{title, genres, filter.limit(), filter.offset()}
 
-    rows, err := m.DB.QueryContext(ctx, query, args...)
+    rows, err := m.DB.Query(ctx, query, args...)
     if err != nil {
         return nil, Metadata{}, err
     }
@@ -131,7 +131,7 @@ func (m MovieModel) GetAll(title string, genres []string, filter Filter) ([]*Mov
             &movie.Title,
             &movie.Year,
             &movie.Runtime,
-            pq.Array(&movie.Genres),
+            &movie.Genres,
             &movie.Version,
         )
         if err != nil {
@@ -161,7 +161,7 @@ func (m MovieModel) Update(movie *Movie) error {
         movie.Title,
         movie.Year,
         movie.Runtime,
-        pq.Array(movie.Genres),
+        movie.Genres,
         movie.ID,
         movie.Version,  // Add the expected movie version.
     }
@@ -169,10 +169,10 @@ func (m MovieModel) Update(movie *Movie) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    err := m.DB.QueryRowContext(ctx, query, args...).Scan(&movie.Version)
+    err := m.DB.QueryRow(ctx, query, args...).Scan(&movie.Version)
     if err != nil {
         switch {
-        case errors.Is(err, sql.ErrNoRows):
+        case errors.Is(err, pgx.ErrNoRows):
             return ErrEditConflict
         default:
             return err
@@ -194,17 +194,12 @@ func (m MovieModel) Delete(id int64) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    result, err := m.DB.ExecContext(ctx, query, id)
+    result, err := m.DB.Exec(ctx, query, id)
     if err != nil {
         return err
     }
 
-    rowsAffected, err := result.RowsAffected()
-    if err != nil {
-        return err
-    }
-
-    if rowsAffected == 0 {
+    if result.RowsAffected() == 0 {
         return ErrRecordNotFound
     }
 
