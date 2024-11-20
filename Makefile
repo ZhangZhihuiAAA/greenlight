@@ -5,13 +5,16 @@ go_mod_init:
 	go mod init greenlight.zzh.net
 
 go_install:
-	go install github.com/rakyll/hey@latest
+	go install github.com/rakyll/hey
 
 go_get:
-	go get github.com/julienschmidt/httprouter@v1
+	go get github.com/julienschmidt/httprouter
 	go get github.com/jackc/pgx/v5
-	go get golang.org/x/time/rate@latest
-	go get golang.org/x/crypto/bcrypt@latest
+	go get golang.org/x/time/rate
+	go get golang.org/x/crypto/bcrypt
+	go get github.com/jordan-wright/email
+	go get github.com/spf13/viper
+	go get github.com/fsnotify/fsnotify
 
 postgres_run:
 	docker run --name postgres17 -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=root -d postgres:latest
@@ -25,8 +28,11 @@ psql_root:
 psql_greenlight:
 	docker exec -it postgres17 psql --dbname=greenlight --username=greenlight
 
-export_db_dsn:
-	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost/greenlight?sslmode=disable'
+export_envs:
+	export GREENLIGHT_ENV='development'
+	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost:5432/greenlight?sslmode=disable'
+	export GREENLIGHT_SMTP_USERNAME='XXXXXXXXXX'
+	export GREENLIGHT_SMTP_PASSWORD='XXXXXXXXXX'
 
 migrate_create:
 	migrate create -seq -ext=.sql -dir=./migrations create_movie_table
