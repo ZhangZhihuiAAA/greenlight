@@ -23,16 +23,17 @@ type appConfig struct {
     serverAddress string
     env           string
     dbConnString  string
-    limiter       *config.RateLimiter
-    emailSender   *mail.EmailSender
+    limiter       *config.LimiterConfig
+    smtp          *config.SMTPConfig
 }
 
 // Define an application struct to hold the dependencies for our HTTP handlers, helpers,
 // and middleware.
 type application struct {
-    config appConfig
-    logger *slog.Logger
-    models data.Models
+    config      appConfig
+    logger      *slog.Logger
+    models      data.Models
+    emailSender *mail.EmailSender
 }
 
 func main() {
@@ -42,7 +43,7 @@ func main() {
         env           string
     )
 
-    // Read the location of config files for dynamic configuration from command line. 
+    // Read the location of config files for dynamic configuration from command line.
     flag.StringVar(&configPath, "config-path", "internal/config", "The directory that contains configuration files.")
 
     // Read static configuration from command line.
@@ -89,16 +90,16 @@ func main() {
             cfgDynamic.DBUsername, cfgDynamic.DBPassword, cfgDynamic.DBServer, cfgDynamic.DBPort, cfgDynamic.DBName,
             cfgDynamic.DBSSLMode, cfgDynamic.DBPoolMaxConns, cfgDynamic.DBPoolMaxConnIdleTime,
         ),
-        limiter: &config.RateLimiter{
+        limiter: &config.LimiterConfig{
             Rps:     cfgDynamic.LimiterRps,
             Burst:   cfgDynamic.LimiterBurst,
             Enabled: cfgDynamic.LimiterEnabled,
         },
-        emailSender: &mail.EmailSender{
-            Username:          cfgDynamic.SMTPUername,
-            Password:          cfgDynamic.SMTPPassword,
-            SMTPAuthAddress:   cfgDynamic.SMTPAuthAddress,
-            SMTPServerAddress: cfgDynamic.SMTPServerAddress,
+        smtp: &config.SMTPConfig{
+            Username:      cfgDynamic.SMTPUsername,
+            Password:      cfgDynamic.SMTPPassword,
+            AuthAddress:   cfgDynamic.SMTPAuthAddress,
+            ServerAddress: cfgDynamic.SMTPServerAddress,
         },
     }
 
@@ -111,6 +112,16 @@ func main() {
     }
     defer poolWrapper.Pool.Close()
     logger.Info("database connection pool established")
+
+    // Create the application instance.
+    app := &application{
+        config:      cfg,
+        logger:      logger,
+        models:      data.NewModels(&poolWrapper),
+        emailSender: &mail.EmailSender{
+            SMTPCfg: cfg.smtp,
+        },
+    }
 
     // Watch and reload dynamic.env config file.
     go func() {
@@ -177,20 +188,14 @@ func main() {
                     os.Exit(1)
                 }
 
-                cfg.emailSender.Username = cfgDynamic.SMTPUername
-                cfg.emailSender.Password = cfgDynamic.SMTPPassword
-                cfg.emailSender.SMTPAuthAddress = cfgDynamic.SMTPAuthAddress
-                cfg.emailSender.SMTPServerAddress = cfgDynamic.SMTPServerAddress
+                cfg.smtp.Username = cfgDynamic.SMTPUsername
+                cfg.smtp.Password = cfgDynamic.SMTPPassword
+                cfg.smtp.AuthAddress = cfgDynamic.SMTPAuthAddress
+                cfg.smtp.ServerAddress = cfgDynamic.SMTPServerAddress
             }
         })
         viperDynamicSMTP.WatchConfig()
     }()
-
-    app := &application{
-        config: cfg,
-        logger: logger,
-        models: data.NewModels(&poolWrapper),
-    }
 
     err = app.serve()
     if err != nil {

@@ -67,15 +67,15 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
                 app.serverErrorResponse(w, r, err)
                 return
             }
-    
+
             mu.Lock()
-    
+
             if _, found := clients[ip]; !found {
                 clients[ip] = &client{
                     limiter: rate.NewLimiter(rate.Limit(app.config.limiter.Rps), app.config.limiter.Burst),
                 }
             }
-    
+
             clients[ip].lastSeen = time.Now()
     
             if !clients[ip].limiter.Allow() {
@@ -83,7 +83,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
                 app.rateLimitExceededResponse(w, r)
                 return
             }
-    
+
             mu.Unlock()
         }
 

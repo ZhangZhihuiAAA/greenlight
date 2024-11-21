@@ -19,11 +19,26 @@ type Config struct {
     LimiterRps            float64       `mapstructure:"LIMITER_RPS"`
     LimiterBurst          int           `mapstructure:"LIMITER_BURST"`
     LimiterEnabled        bool          `mapstructure:"LIMITER_ENABLED"`
-    SMTPUername           string        `mapstructure:"SMTP_USERNAME"`
+    SMTPUsername          string        `mapstructure:"SMTP_USERNAME"`
     SMTPPassword          string        `mapstructure:"SMTP_PASSWORD"`
     SMTPAuthAddress       string        `mapstructure:"SMTP_AUTH_ADDRESS"`
     SMTPServerAddress     string        `mapstructure:"SMTP_SERVER_ADDRESS"`
     LoadTime              time.Time
+}
+
+// LimiterConfig stores configuration for rate limiting.
+type LimiterConfig struct {
+    Rps     float64
+    Burst   int
+    Enabled bool
+}
+
+// SMTPConfig stores configuration for sending emails.
+type SMTPConfig struct {
+    Username      string
+    Password      string
+    AuthAddress   string
+    ServerAddress string
 }
 
 // LoadConfig loads configuration from a config file to a Config instance.
