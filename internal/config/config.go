@@ -16,7 +16,7 @@ type Config struct {
     DBSSLMode             string        `mapstructure:"DB_SSLMODE"`
     DBPoolMaxConns        int           `mapstructure:"DB_POOL_MAX_CONNS"`
     DBPoolMaxConnIdleTime time.Duration `mapstructure:"DB_POOL_MAX_CONN_IDLE_TIME"`
-    LimiterRPS            float64       `mapstructure:"LIMITER_RPS"`
+    LimiterRps            float64       `mapstructure:"LIMITER_RPS"`
     LimiterBurst          int           `mapstructure:"LIMITER_BURST"`
     LimiterEnabled        bool          `mapstructure:"LIMITER_ENABLED"`
     SMTPUername           string        `mapstructure:"SMTP_USERNAME"`

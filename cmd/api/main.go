@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"greenlight.zzh.net/internal/config"
 	"greenlight.zzh.net/internal/data"
@@ -25,12 +23,8 @@ type appConfig struct {
     serverAddress string
     env           string
     dbConnString  string
-    limiter       struct {
-        rps     float64
-        burst   int
-        enabled bool
-    }
-    emailSender mail.EmailSender
+    limiter       *config.RateLimiter
+    emailSender   *mail.EmailSender
 }
 
 // Define an application struct to hold the dependencies for our HTTP handlers, helpers,
@@ -48,9 +42,14 @@ func main() {
         env           string
     )
 
+    // Read the location of config files for dynamic configuration from command line. 
     flag.StringVar(&configPath, "config-path", "internal/config", "The directory that contains configuration files.")
+
+    // Read static configuration from command line.
     flag.StringVar(&serverAddress, "server-address", ":4000", "The server address of this application.")
     flag.StringVar(&env, "env", "development", "Environment (development|staging|production)")
+
+    // Parse command line parameters.
     flag.Parse()
 
     logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -90,16 +89,12 @@ func main() {
             cfgDynamic.DBUsername, cfgDynamic.DBPassword, cfgDynamic.DBServer, cfgDynamic.DBPort, cfgDynamic.DBName,
             cfgDynamic.DBSSLMode, cfgDynamic.DBPoolMaxConns, cfgDynamic.DBPoolMaxConnIdleTime,
         ),
-        limiter: struct {
-            rps     float64
-            burst   int
-            enabled bool
-        }{
-            cfgDynamic.LimiterRPS,
-            cfgDynamic.LimiterBurst,
-            cfgDynamic.LimiterEnabled,
+        limiter: &config.RateLimiter{
+            Rps:     cfgDynamic.LimiterRps,
+            Burst:   cfgDynamic.LimiterBurst,
+            Enabled: cfgDynamic.LimiterEnabled,
         },
-        emailSender: mail.EmailSender{
+        emailSender: &mail.EmailSender{
             Username:          cfgDynamic.SMTPUername,
             Password:          cfgDynamic.SMTPPassword,
             SMTPAuthAddress:   cfgDynamic.SMTPAuthAddress,
@@ -107,13 +102,14 @@ func main() {
         },
     }
 
-    // Create a DB connection pool.
-    dbConnPool, err := createDBConnPool(cfg.dbConnString)
+    // Create a database connection pool wrapper.
+    var poolWrapper data.PoolWrapper
+    err = poolWrapper.CreatePool(cfg.dbConnString)
     if err != nil {
         logger.Error(err.Error())
         os.Exit(1)
     }
-    defer dbConnPool.Close()
+    defer poolWrapper.Pool.Close()
     logger.Info("database connection pool established")
 
     // Watch and reload dynamic.env config file.
@@ -122,6 +118,8 @@ func main() {
             // A change in the config file can cause two 'write' events.
             // Only need to respond once. We respond to the first one.
             if time.Since(cfgDynamic.LoadTime) > time.Duration(100*time.Millisecond) {
+                logger.Info("configuration change detected", "filename", in.Name, "operation", in.Op)
+
                 // Reload the config file if any change is detected.
                 err := config.LoadConfig(viperDynamic, configPath, "env", "dynamic", &cfgDynamic)
                 if err != nil {
@@ -129,15 +127,9 @@ func main() {
                     os.Exit(1)
                 }
 
-                cfg.limiter = struct {
-                    rps     float64
-                    burst   int
-                    enabled bool
-                }{
-                    cfgDynamic.LimiterRPS,
-                    cfgDynamic.LimiterBurst,
-                    cfgDynamic.LimiterEnabled,
-                }
+                cfg.limiter.Rps = cfgDynamic.LimiterRps
+                cfg.limiter.Burst = cfgDynamic.LimiterBurst
+                cfg.limiter.Enabled = cfgDynamic.LimiterEnabled
             }
         })
         viperDynamic.WatchConfig()
@@ -147,6 +139,8 @@ func main() {
     go func() {
         viperDynamicDB.OnConfigChange(func(in fsnotify.Event) {
             if time.Since(cfgDynamic.LoadTime) > time.Duration(100*time.Millisecond) {
+                logger.Info("configuration change detected", "filename", in.Name, "operation", in.Op)
+
                 err := config.LoadConfig(viperDynamicDB, configPath, "env", "dynamic_db_secret", &cfgDynamic)
                 if err != nil {
                     logger.Error(err.Error())
@@ -159,9 +153,9 @@ func main() {
                     cfgDynamic.DBSSLMode, cfgDynamic.DBPoolMaxConns, cfgDynamic.DBPoolMaxConnIdleTime,
                 )
 
-                // Close and recreate the dbConnPool.
-                dbConnPool.Close()
-                dbConnPool, err = createDBConnPool(cfg.dbConnString)
+                // Close the old database connection pool and create a new one.
+                poolWrapper.Pool.Close()
+                err = poolWrapper.CreatePool(cfg.dbConnString)
                 if err != nil {
                     logger.Error(err.Error())
                     os.Exit(1)
@@ -175,18 +169,18 @@ func main() {
     go func() {
         viperDynamicSMTP.OnConfigChange(func(in fsnotify.Event) {
             if time.Since(cfgDynamic.LoadTime) > time.Duration(100*time.Millisecond) {
+                logger.Info("configuration change detected", "filename", in.Name, "operation", in.Op)
+
                 err := config.LoadConfig(viperDynamicSMTP, configPath, "env", "dynamic_smtp_secret", &cfgDynamic)
                 if err != nil {
                     logger.Error(err.Error())
                     os.Exit(1)
                 }
 
-                cfg.emailSender = mail.EmailSender{
-                    Username:          cfgDynamic.SMTPUername,
-                    Password:          cfgDynamic.SMTPPassword,
-                    SMTPAuthAddress:   cfgDynamic.SMTPAuthAddress,
-                    SMTPServerAddress: cfgDynamic.SMTPServerAddress,
-                }
+                cfg.emailSender.Username = cfgDynamic.SMTPUername
+                cfg.emailSender.Password = cfgDynamic.SMTPPassword
+                cfg.emailSender.SMTPAuthAddress = cfgDynamic.SMTPAuthAddress
+                cfg.emailSender.SMTPServerAddress = cfgDynamic.SMTPServerAddress
             }
         })
         viperDynamicSMTP.WatchConfig()
@@ -195,7 +189,7 @@ func main() {
     app := &application{
         config: cfg,
         logger: logger,
-        models: data.NewModels(dbConnPool),
+        models: data.NewModels(&poolWrapper),
     }
 
     err = app.serve()
@@ -203,22 +197,4 @@ func main() {
         logger.Error(err.Error())
         os.Exit(1)
     }
-}
-
-func createDBConnPool(connString string) (*pgxpool.Pool, error) {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    p, err := pgxpool.New(ctx, connString)
-    if err != nil {
-        return nil, err
-    }
-
-    err = p.Ping(ctx)
-    if err != nil {
-        p.Close()
-        return nil, err
-    }
-
-    return p, nil
 }

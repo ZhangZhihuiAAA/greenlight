@@ -61,7 +61,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
     }()
 
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if app.config.limiter.enabled {
+        if app.config.limiter.Enabled {
             ip, _, err := net.SplitHostPort(r.RemoteAddr)
             if err != nil {
                 app.serverErrorResponse(w, r, err)
@@ -72,7 +72,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
     
             if _, found := clients[ip]; !found {
                 clients[ip] = &client{
-                    limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst),
+                    limiter: rate.NewLimiter(rate.Limit(app.config.limiter.Rps), app.config.limiter.Burst),
                 }
             }
     

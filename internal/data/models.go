@@ -2,8 +2,6 @@ package data
 
 import (
 	"errors"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -20,9 +18,9 @@ type Models struct {
 }
 
 // NewModels returns a Models struct containing the initialized models.
-func NewModels(p *pgxpool.Pool) Models {
+func NewModels(pw *PoolWrapper) Models {
     return Models{
-        Movie: MovieModel{DB: p},
-        User:  UserModel{DB: p},
+        Movie: MovieModel{DB: pw},
+        User:  UserModel{DB: pw},
     }
 }

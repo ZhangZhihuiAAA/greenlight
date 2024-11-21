@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"greenlight.zzh.net/internal/validator"
 )
 
@@ -40,9 +39,9 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
     v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
 }
 
-// MovieModel struct wraps a database connection pool.
+// MovieModel struct wraps a database connection pool wrapper.
 type MovieModel struct {
-    DB *pgxpool.Pool
+    DB *PoolWrapper
 }
 
 // Insert inserts a new record in the movie table.
@@ -56,7 +55,7 @@ func (m MovieModel) Insert(movie *Movie) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    return m.DB.QueryRow(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+    return m.DB.Pool.QueryRow(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
 // Get returns a specific record from the movie table.
@@ -74,7 +73,7 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    err := m.DB.QueryRow(ctx, query, id).Scan(
+    err := m.DB.Pool.QueryRow(ctx, query, id).Scan(
         &movie.ID,
         &movie.CreatedAt,
         &movie.Title,
@@ -112,7 +111,7 @@ func (m MovieModel) GetAll(title string, genres []string, filter Filter) ([]*Mov
 
     args := []any{title, genres, filter.limit(), filter.offset()}
 
-    rows, err := m.DB.Query(ctx, query, args...)
+    rows, err := m.DB.Pool.Query(ctx, query, args...)
     if err != nil {
         return nil, Metadata{}, err
     }
@@ -169,7 +168,7 @@ func (m MovieModel) Update(movie *Movie) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    err := m.DB.QueryRow(ctx, query, args...).Scan(&movie.Version)
+    err := m.DB.Pool.QueryRow(ctx, query, args...).Scan(&movie.Version)
     if err != nil {
         switch {
         case errors.Is(err, pgx.ErrNoRows):
@@ -194,7 +193,7 @@ func (m MovieModel) Delete(id int64) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Second)
     defer cancel()
 
-    result, err := m.DB.Exec(ctx, query, id)
+    result, err := m.DB.Pool.Exec(ctx, query, id)
     if err != nil {
         return err
     }

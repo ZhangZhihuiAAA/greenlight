@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 	"greenlight.zzh.net/internal/validator"
 )
@@ -95,9 +94,9 @@ func ValidateUser(v *validator.Validator, user *User) {
     }
 }
 
-// UserModel struct wraps a sql.DB connection pool.
+// UserModel struct wraps a database connection pool wrapper.
 type UserModel struct {
-    DB *pgxpool.Pool
+    DB *PoolWrapper
 }
 
 // Insert inserts a new record in the users table.
@@ -111,7 +110,7 @@ func (m UserModel) Insert(user *User) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
     defer cancel()
 
-    err := m.DB.QueryRow(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.Version)
+    err := m.DB.Pool.QueryRow(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.Version)
     if err != nil {
         switch {
         case strings.Contains(err.Error(), ErrMsgViolateUniqueConstraint) && strings.Contains(err.Error(), "email"):
@@ -135,7 +134,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
     defer cancel()
 
-    err := m.DB.QueryRow(ctx, query, email).Scan(
+    err := m.DB.Pool.QueryRow(ctx, query, email).Scan(
         &user.ID,
         &user.CreatedAt,
         &user.Name,
@@ -176,7 +175,7 @@ func (m UserModel) Update(user *User) error {
     ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
     defer cancel()
 
-    err := m.DB.QueryRow(ctx, query, args...).Scan(&user.Version)
+    err := m.DB.Pool.QueryRow(ctx, query, args...).Scan(&user.Version)
     if err != nil {
         switch {
             case strings.Contains(err.Error(), ErrMsgViolateUniqueConstraint) && strings.Contains(err.Error(), "email"):
