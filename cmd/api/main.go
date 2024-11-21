@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -20,35 +21,39 @@ import (
 const version = "1.0.0"
 
 type appConfig struct {
+    // Field read from command line
     serverAddress string
     env           string
-    dbConnString  string
-    limiter       *config.LimiterConfig
-    smtp          *config.SMTPConfig
+
+    // Fields loaded from dynamic.env
+    limiter *config.LimiterConfig
+
+    // Fields loaded from dynamic_db_secret.env
+    dbConnString string
+
+    // Fields loaded from dynamic_smtp_secret.env
+    smtp *config.SMTPConfig
 }
 
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
-// and middleware.
+// application struct holds the dependencies for our HTTP handlers, helpers, and middleware.
 type application struct {
     config      appConfig
     logger      *slog.Logger
     models      data.Models
     emailSender *mail.EmailSender
+    wg          sync.WaitGroup
 }
 
 func main() {
-    var (
-        configPath    string
-        serverAddress string
-        env           string
-    )
-
-    // Read the location of config files for dynamic configuration from command line.
-    flag.StringVar(&configPath, "config-path", "internal/config", "The directory that contains configuration files.")
+    var cfg appConfig
 
     // Read static configuration from command line.
-    flag.StringVar(&serverAddress, "server-address", ":4000", "The server address of this application.")
-    flag.StringVar(&env, "env", "development", "Environment (development|staging|production)")
+    flag.StringVar(&cfg.serverAddress, "server-address", ":4000", "The server address of this application.")
+    flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+
+    var configPath string
+    // Read the location of config files for dynamic configuration from command line.
+    flag.StringVar(&configPath, "config-path", "internal/config", "The directory that contains configuration files.")
 
     // Parse command line parameters.
     flag.Parse()
@@ -81,26 +86,21 @@ func main() {
         os.Exit(1)
     }
 
-    // Create an appConfig instance.
-    cfg := appConfig{
-        serverAddress: serverAddress,
-        env:           env,
-        dbConnString: fmt.Sprintf(
-            "postgres://%s:%s@%s:%d/%s?sslmode=%s&pool_max_conns=%d&pool_max_conn_idle_time=%s",
-            cfgDynamic.DBUsername, cfgDynamic.DBPassword, cfgDynamic.DBServer, cfgDynamic.DBPort, cfgDynamic.DBName,
-            cfgDynamic.DBSSLMode, cfgDynamic.DBPoolMaxConns, cfgDynamic.DBPoolMaxConnIdleTime,
-        ),
-        limiter: &config.LimiterConfig{
-            Rps:     cfgDynamic.LimiterRps,
-            Burst:   cfgDynamic.LimiterBurst,
-            Enabled: cfgDynamic.LimiterEnabled,
-        },
-        smtp: &config.SMTPConfig{
-            Username:      cfgDynamic.SMTPUsername,
-            Password:      cfgDynamic.SMTPPassword,
-            AuthAddress:   cfgDynamic.SMTPAuthAddress,
-            ServerAddress: cfgDynamic.SMTPServerAddress,
-        },
+    cfg.limiter = &config.LimiterConfig{
+        Rps:     cfgDynamic.LimiterRps,
+        Burst:   cfgDynamic.LimiterBurst,
+        Enabled: cfgDynamic.LimiterEnabled,
+    }
+    cfg.dbConnString = fmt.Sprintf(
+        "postgres://%s:%s@%s:%d/%s?sslmode=%s&pool_max_conns=%d&pool_max_conn_idle_time=%s",
+        cfgDynamic.DBUsername, cfgDynamic.DBPassword, cfgDynamic.DBServer, cfgDynamic.DBPort, cfgDynamic.DBName,
+        cfgDynamic.DBSSLMode, cfgDynamic.DBPoolMaxConns, cfgDynamic.DBPoolMaxConnIdleTime,
+    )
+    cfg.smtp = &config.SMTPConfig{
+        Username:      cfgDynamic.SMTPUsername,
+        Password:      cfgDynamic.SMTPPassword,
+        AuthAddress:   cfgDynamic.SMTPAuthAddress,
+        ServerAddress: cfgDynamic.SMTPServerAddress,
     }
 
     // Create a database connection pool wrapper.
@@ -118,9 +118,7 @@ func main() {
         config:      cfg,
         logger:      logger,
         models:      data.NewModels(&poolWrapper),
-        emailSender: &mail.EmailSender{
-            SMTPCfg: cfg.smtp,
-        },
+        emailSender: &mail.EmailSender{SMTPCfg: cfg.smtp},
     }
 
     // Watch and reload dynamic.env config file.

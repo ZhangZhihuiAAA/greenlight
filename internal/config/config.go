@@ -8,6 +8,12 @@ import (
 
 // Config stores configuration that can be dynamically reloaded at runtime.
 type Config struct {
+    // Fields from dynamic.env
+    LimiterRps     float64 `mapstructure:"LIMITER_RPS"`
+    LimiterBurst   int     `mapstructure:"LIMITER_BURST"`
+    LimiterEnabled bool    `mapstructure:"LIMITER_ENABLED"`
+
+    // Fields from dynamic_db_secret.env
     DBUsername            string        `mapstructure:"DB_USERNAME"`
     DBPassword            string        `mapstructure:"DB_PASSWORD"`
     DBServer              string        `mapstructure:"DB_SERVER"`
@@ -16,14 +22,15 @@ type Config struct {
     DBSSLMode             string        `mapstructure:"DB_SSLMODE"`
     DBPoolMaxConns        int           `mapstructure:"DB_POOL_MAX_CONNS"`
     DBPoolMaxConnIdleTime time.Duration `mapstructure:"DB_POOL_MAX_CONN_IDLE_TIME"`
-    LimiterRps            float64       `mapstructure:"LIMITER_RPS"`
-    LimiterBurst          int           `mapstructure:"LIMITER_BURST"`
-    LimiterEnabled        bool          `mapstructure:"LIMITER_ENABLED"`
-    SMTPUsername          string        `mapstructure:"SMTP_USERNAME"`
-    SMTPPassword          string        `mapstructure:"SMTP_PASSWORD"`
-    SMTPAuthAddress       string        `mapstructure:"SMTP_AUTH_ADDRESS"`
-    SMTPServerAddress     string        `mapstructure:"SMTP_SERVER_ADDRESS"`
-    LoadTime              time.Time
+
+    // Fields from dynamic_smtp_secret.env
+    SMTPUsername      string `mapstructure:"SMTP_USERNAME"`
+    SMTPPassword      string `mapstructure:"SMTP_PASSWORD"`
+    SMTPAuthAddress   string `mapstructure:"SMTP_AUTH_ADDRESS"`
+    SMTPServerAddress string `mapstructure:"SMTP_SERVER_ADDRESS"`
+
+    // Field needed by reloading above fields
+    LoadTime time.Time
 }
 
 // LimiterConfig stores configuration for rate limiting.

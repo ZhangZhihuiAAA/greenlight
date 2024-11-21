@@ -53,6 +53,16 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
         return
     }
 
+    // Send the welcome email in background.
+    app.background(func() {
+        err = app.emailSender.Send(user.Email, "user_welcome.html", user)
+        if err != nil {
+            // Importantly, if there is an error sending the email, we use the app.logger.Error() 
+            // helper to manage it, instead of the app.serverErrorResponse() helper like before.
+            app.logger.Error(err.Error())
+        }
+    })
+
     err = app.writeJSON(w, http.StatusCreated, envelope{"user": user}, nil)
     if err != nil {
         app.serverErrorResponse(w, r, err)

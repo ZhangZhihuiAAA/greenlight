@@ -28,12 +28,6 @@ psql_root:
 psql_greenlight:
 	docker exec -it postgres17 psql --dbname=greenlight --username=greenlight
 
-export_envs:
-	export GREENLIGHT_ENV='development'
-	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost:5432/greenlight?sslmode=disable'
-	export GREENLIGHT_SMTP_USERNAME='XXXXXXXXXX'
-	export GREENLIGHT_SMTP_PASSWORD='XXXXXXXXXX'
-
 migrate_create:
 	migrate create -seq -ext=.sql -dir=./migrations create_movie_table
 	migrate create -seq -ext=.sql -dir=./migrations add_movie_check_constraints
