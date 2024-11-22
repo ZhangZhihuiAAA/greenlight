@@ -33,6 +33,10 @@ migrate_create:
 	migrate create -seq -ext=.sql -dir=./migrations add_movie_check_constraints
 	migrate create -seq -ext .sql -dir ./migrations add_movie_indexes
 	migrate create -seq -ext=.sql -dir=./migrations create_users_table
+	migrate create -seq -ext .sql -dir ./migrations create_token_table
+
+export_db_dsn:
+	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost:5432/greenlight?sslmode=disable'
 
 migrate_up:
 	@migrate -path ./migrations -database "$(GREENLIGHT_DB_DSN)" up

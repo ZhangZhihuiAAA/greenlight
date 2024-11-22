@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"time"
@@ -123,7 +124,7 @@ func (m UserModel) Insert(user *User) error {
     return nil
 }
 
-// GetByEmail retrives a user from the users table based on its email address.
+// GetByEmail retrives a user from the users table by email address.
 func (m UserModel) GetByEmail(email string) (*User, error) {
     query := `SELECT id, created_at, name, email, password_hash, activated, version 
                 FROM users 
@@ -144,6 +145,45 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
         &user.Version,
     )
 
+    if err != nil {
+        switch {
+        case errors.Is(err, pgx.ErrNoRows):
+            return nil, ErrRecordNotFound
+        default:
+            return nil, err
+        }
+    }
+
+    return &user, nil
+}
+
+// GetByToken retrives the user associated with a particular activation token from the users table.
+func (m UserModel) GetForToken(tokenScope, tokenPlaintext string) (*User, error) {
+    query := `SELECT u.id, u.created_at, u.name, u.email, u.password_hash, u.activated, u.version 
+                FROM users u 
+               INNER JOIN token t ON u.id = t.user_id 
+               WHERE t.hash = $1 
+                 AND t.scope = $2 
+                 AND t.expiry > $3`
+
+    tokenHash := sha256.Sum256([]byte(tokenPlaintext))
+
+    args := []any{tokenHash[:], tokenScope, time.Now()}
+
+    var user User
+
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+
+    err := m.DB.Pool.QueryRow(ctx, query, args...).Scan(
+        &user.ID,
+        &user.CreatedAt,
+        &user.Name,
+        &user.Email,
+        &user.Password.hash,
+        &user.Activated,
+        &user.Version,
+    )
     if err != nil {
         switch {
         case errors.Is(err, pgx.ErrNoRows):

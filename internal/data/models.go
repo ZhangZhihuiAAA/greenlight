@@ -14,6 +14,7 @@ var (
 // Models puts models together in one struct.
 type Models struct {
     Movie MovieModel
+    Token TokenModel
     User  UserModel
 }
 
@@ -21,6 +22,7 @@ type Models struct {
 func NewModels(pw *PoolWrapper) Models {
     return Models{
         Movie: MovieModel{DB: pw},
+        Token: TokenModel{DB: pw},
         User:  UserModel{DB: pw},
     }
 }
