@@ -1,5 +1,9 @@
 create_dirs:
-	mkdir -p bin cmd/api internal migrations remote
+	mkdir bin 
+	mkdir -p cmd/api
+	mkdir -p internal/data internal/config internal/validator internal/mail
+	mkdir migrations
+	mkdir remote
 
 go_mod_init:
 	go mod init greenlight.zzh.net
@@ -28,15 +32,16 @@ psql_root:
 psql_greenlight:
 	docker exec -it postgres17 psql --dbname=greenlight --username=greenlight
 
+export_db_dsn:
+	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost:5432/greenlight?sslmode=disable'
+
 migrate_create:
 	migrate create -seq -ext=.sql -dir=./migrations create_movie_table
 	migrate create -seq -ext=.sql -dir=./migrations add_movie_check_constraints
 	migrate create -seq -ext .sql -dir ./migrations add_movie_indexes
 	migrate create -seq -ext=.sql -dir=./migrations create_users_table
 	migrate create -seq -ext .sql -dir ./migrations create_token_table
-
-export_db_dsn:
-	export GREENLIGHT_DB_DSN='postgres://greenlight:greenlight@localhost:5432/greenlight?sslmode=disable'
+	migrate create -seq -ext .sql -dir ./migrations add_permissions
 
 migrate_up:
 	@migrate -path ./migrations -database "$(GREENLIGHT_DB_DSN)" up

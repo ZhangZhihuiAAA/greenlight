@@ -13,16 +13,18 @@ var (
 
 // Models puts models together in one struct.
 type Models struct {
-    Movie MovieModel
-    Token TokenModel
-    User  UserModel
+    Movie      MovieModel
+    Permission PermissionModel
+    Token      TokenModel
+    User       UserModel
 }
 
 // NewModels returns a Models struct containing the initialized models.
 func NewModels(pw *PoolWrapper) Models {
     return Models{
-        Movie: MovieModel{DB: pw},
-        Token: TokenModel{DB: pw},
-        User:  UserModel{DB: pw},
+        Movie:      MovieModel{DB: pw},
+        Permission: PermissionModel{DB: pw},
+        Token:      TokenModel{DB: pw},
+        User:       UserModel{DB: pw},
     }
 }
