@@ -13,6 +13,7 @@ import (
 )
 
 var ErrDuplicateEmail = errors.New("duplicate email")
+var AnonymousUser = &User{}
 
 // User represents an individual user.
 type User struct {
@@ -22,7 +23,12 @@ type User struct {
     Email     string    `json:"email"`
     Password  password  `json:"-"`
     Activated bool      `json:"activated"`
-    Version   int       `json:"version"`
+    Version   int       `json:"-"`
+}
+
+// IsAnonymous checks if a User instance is the AnonymousUser.
+func (u *User) IsAnonymous() bool {
+    return u == AnonymousUser
 }
 
 type password struct {

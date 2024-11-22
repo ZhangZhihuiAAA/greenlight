@@ -10,15 +10,18 @@ import (
 	"greenlight.zzh.net/internal/validator"
 )
 
-const ScopeActivation = "activation"
+const (
+    ScopeActivation     = "activation"
+    ScopeAuthentication = "authentication"
+)
 
 // Token holds the data for a token.
 type Token struct {
-    Plaintext string
-    Hash      []byte
-    UserID    int64
-    Expiry    time.Time
-    Scope     string
+    Plaintext string    `json:"token"`
+    Hash      []byte    `json:"-"`
+    UserID    int64     `json:"-"`
+    Expiry    time.Time `json:"expiry"`
+    Scope     string    `json:"-"`
 }
 
 func generateToken(userID int64, ttl time.Duration, scope string) (*Token, error) {
@@ -33,24 +36,24 @@ func generateToken(userID int64, ttl time.Duration, scope string) (*Token, error
     // Initialize a zero-valued byte slice with a length of 16 bytes.
     randomBytes := make([]byte, 16)
 
-    // Use the Read() function from the crypto/rand package to fill the byte slice with random 
-    // bytes from your operating system's CSPRNG. This will return an error if the CSPRNG fails 
+    // Use the Read() function from the crypto/rand package to fill the byte slice with random
+    // bytes from your operating system's CSPRNG. This will return an error if the CSPRNG fails
     // to function correctly.
     _, err := rand.Read(randomBytes)
     if err != nil {
         return nil, err
     }
 
-    // Encode the byte slice to a base32-encoded string and assign it to the token's Plaintext 
-    // field. This will be the token string that we send to the user in their welcome email. 
+    // Encode the byte slice to a base32-encoded string and assign it to the token's Plaintext
+    // field. This will be the token string that we send to the user in their welcome email.
     // They will look similar to this: Y3QMGX3PJ3WLRL2YRTQGQ6KRHU
-    // Note that by default base32 strings may be padded at the end with the = character. We dont' 
+    // Note that by default base32 strings may be padded at the end with the = character. We dont'
     // need this padding character for the purpose of our tokens, so we omit them.
     token.Plaintext = base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(randomBytes)
 
-    // Generate a SHA-256 hash of the plaintext token string. This will be the value that we store 
-    // in the 'hash' field of our database table. Note that the sha256.Sum256() function returns 
-    // an *array* of length 32, so to make it easier to work with we convert it ot a slice using 
+    // Generate a SHA-256 hash of the plaintext token string. This will be the value that we store
+    // in the 'hash' field of our database table. Note that the sha256.Sum256() function returns
+    // an *array* of length 32, so to make it easier to work with we convert it ot a slice using
     // the [:] operator before storing it.
     hash := sha256.Sum256([]byte(token.Plaintext))
     token.Hash = hash[:]
