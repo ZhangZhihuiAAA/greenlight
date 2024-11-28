@@ -61,7 +61,7 @@ func main() {
 
     var configPath string
     // Read the location of config files for dynamic configuration from command line.
-    flag.StringVar(&configPath, "config-path", "internal/config", "The directory that contains configuration files.")
+    flag.StringVar(&configPath, "config-path", "config", "The directory that contains configuration files.")
 
     // Parse command line parameters.
     flag.Parse()
