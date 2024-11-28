@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +22,12 @@ import (
 const version = "1.0.0"
 
 type appConfig struct {
-    // Field read from command line
+    // Fields read from command line
     serverAddress string
     env           string
+    cors          struct {
+        trustedOrigins []string
+    }
 
     // Fields loaded from dynamic.env
     limiter *config.LimiterConfig
@@ -50,6 +54,10 @@ func main() {
     // Read static configuration from command line.
     flag.StringVar(&cfg.serverAddress, "server-address", ":4000", "The server address of this application.")
     flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+    flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(s string) error {
+        cfg.cors.trustedOrigins = strings.Fields(s)
+        return nil
+    })
 
     var configPath string
     // Read the location of config files for dynamic configuration from command line.
