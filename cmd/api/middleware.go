@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,16 +48,16 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
         clients = make(map[string]*client)
     )
 
-    // Launch a background goroutine which removes old entries from the clients map 
+    // Launch a background goroutine which removes old entries from the clients map
     // once every minute.
     go func() {
         for {
             time.Sleep(time.Minute)
 
             mu.Lock()
-            
+
             for ip, client := range clients {
-                if time.Since(client.lastSeen) > 3 * time.Minute {
+                if time.Since(client.lastSeen) > 3*time.Minute {
                     delete(clients, ip)
                 }
             }
@@ -81,7 +83,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
             }
 
             clients[ip].lastSeen = time.Now()
-    
+
             if !clients[ip].limiter.Allow() {
                 mu.Unlock()
                 app.rateLimitExceededResponse(w, r)
@@ -97,16 +99,16 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 
 func (app *application) authenticate(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Add the "Vary: Authorization" header to the response. This indicates to any caches that 
+        // Add the "Vary: Authorization" header to the response. This indicates to any caches that
         // the response may vary based on the value of the Authorization header in the request.
         w.Header().Add("Vary", "Authorization")
 
-        // Retrieve the value of the Authorization header from the request. 
+        // Retrieve the value of the Authorization header from the request.
         // This will return the empty string "" if there is no such header.
         authorizationHeader := r.Header.Get("Authorization")
 
-        // If there is no Authorization header found, add the AnonymousUser to the request 
-        // context. Then we call the next handler in the chain and return without executing 
+        // If there is no Authorization header found, add the AnonymousUser to the request
+        // context. Then we call the next handler in the chain and return without executing
         // any of the code below.
         if authorizationHeader == "" {
             r = app.contextSetUser(r, data.AnonymousUser)
@@ -114,7 +116,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
             return
         }
 
-        // Otherwise, try to split the Authorization header into its constituent parts. If the 
+        // Otherwise, try to split the Authorization header into its constituent parts. If the
         // header isn't in the expected format, we return a 401 Unauthorized response.
         headerParts := strings.Split(authorizationHeader, " ")
         if len(headerParts) != 2 || headerParts[0] != "Bearer" {
@@ -178,7 +180,7 @@ func (app *application) requireActivatedUser(next http.HandlerFunc) http.Handler
 }
 
 func (app *application) requirePermission(code string, next http.HandlerFunc) http.HandlerFunc {
-    fn := func(w http.ResponseWriter, r *http.Request)  {
+    fn := func(w http.ResponseWriter, r *http.Request) {
         user := app.contextGetUser(r)
 
         permissions, err := app.models.Permission.GetAllForUser(user.ID)
@@ -214,8 +216,8 @@ func (app *application) enableCORS(next http.Handler) http.Handler {
                 if origin == o {
                     w.Header().Set("Access-Control-Allow-Origin", origin)
 
-                    // Check if the request has the HTTP method OPTIONS and contains the 
-                    // "Access-Control-Request-Method" header. If it does, we treat it as a 
+                    // Check if the request has the HTTP method OPTIONS and contains the
+                    // "Access-Control-Request-Method" header. If it does, we treat it as a
                     // preflight request.
                     if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
                         w.Header().Set("Access-Control-Allow-Methods", "OPTIONS, PUT, PATCH, DELETE")
@@ -231,5 +233,79 @@ func (app *application) enableCORS(next http.Handler) http.Handler {
         }
 
         next.ServeHTTP(w, r)
+    })
+}
+
+// The metricsResponseWriter type wraps an existing http.ResponseWriter and also
+// contains a field for recording the response status code, and a boolen flag
+// to indicate whether the response headers have already been written.
+type metricsResponseWriter struct {
+    wrapped       http.ResponseWriter
+    statusCode    int
+    headerWritten bool
+}
+
+func newMetricsResponseWriter(w http.ResponseWriter) *metricsResponseWriter {
+    return &metricsResponseWriter{
+        wrapped:    w,
+        statusCode: http.StatusOK,
+    }
+}
+
+// Header is a simple 'pass through' to the Header() method of the wrapped
+// http.ResponseWriter.
+func (mrw *metricsResponseWriter) Header() http.Header {
+    return mrw.wrapped.Header()
+}
+
+// WriteHeader does a 'pass through' to the WriteHeader() method of the wrapped
+// http.ResponseWriter. But after this returns, we also record the response status
+// code (if it hasn't already been recorded) and set the headerWritten field to
+// true to indicate that the HTTP response headers have now been written.
+func (mrw *metricsResponseWriter) WriteHeader(statusCode int) {
+    mrw.wrapped.WriteHeader(statusCode)
+
+    if !mrw.headerWritten {
+        mrw.statusCode = statusCode
+        mrw.headerWritten = true
+    }
+}
+
+// Write does a 'pass through' to the Write() method of the wrapped http.ResponseWriter.
+// Calling this will automatically write any response headers, so we set the
+// headerWritten field to true.
+func (mrw *metricsResponseWriter) Write(b []byte) (int, error) {
+    mrw.headerWritten = true
+    return mrw.wrapped.Write(b)
+}
+
+// Unwrap returns the existing wrapped http.ResponseWriter.
+func (mrw *metricsResponseWriter) Unwrap() http.ResponseWriter {
+    return mrw.wrapped
+}
+
+func (app *application) metrics(next http.Handler) http.Handler {
+    var (
+        totalRequestsReceived           = expvar.NewInt("total_requests_received")
+        totalResponsesSent              = expvar.NewInt("total_responses_sent")
+        totalProcessingTimeMicroseconds = expvar.NewInt("total_processing_time_μs")
+        totalResponsesSentByStatus      = expvar.NewMap("total_responses_sent_by_status")
+    )
+
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+
+        totalRequestsReceived.Add(1)
+
+        mrw := newMetricsResponseWriter(w)
+
+        next.ServeHTTP(mrw, r)
+
+        totalResponsesSent.Add(1)
+
+        totalResponsesSentByStatus.Add(strconv.Itoa(mrw.statusCode), 1)
+
+        duration := time.Since(start).Microseconds()
+        totalProcessingTimeMicroseconds.Add(duration)
     })
 }
