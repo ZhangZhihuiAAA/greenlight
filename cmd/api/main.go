@@ -16,12 +16,10 @@ import (
 	"greenlight.zzh.net/internal/config"
 	"greenlight.zzh.net/internal/data"
 	"greenlight.zzh.net/internal/mail"
+	"greenlight.zzh.net/internal/vcs"
 )
 
-// Declare a string containing the application version number. Later in the book we'll
-// generate this automatically at build time, but for now we'll just store the version
-// number as a hard-coded global constant.
-const version = "1.0.0"
+var version = vcs.Version()
 
 type appConfig struct {
     // Fields read from command line
@@ -65,8 +63,15 @@ func main() {
     // Read the location of config files for dynamic configuration from command line.
     flag.StringVar(&configPath, "config-path", "config", "The directory that contains configuration files.")
 
+    displayVersion := flag.Bool("version", false, "Display version and exit")
+
     // Parse command line parameters.
     flag.Parse()
+
+    if *displayVersion {
+        fmt.Printf("Version:\t%s\n", version)
+        os.Exit(0)
+    }
 
     logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
